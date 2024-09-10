@@ -81,20 +81,20 @@ pub use self::graphics::Display4in2;
 
 /// Epd4in2 driver
 ///
-pub struct Epd4in2<SPI, CS, BUSY, DC, RST, DELAY> {
+pub struct Epd4in2<SPI, BUSY, DC, RST, DELAY> {
     /// Connection Interface
-    interface: DisplayInterface<SPI, CS, BUSY, DC, RST, DELAY>,
+    interface: DisplayInterface<SPI, BUSY, DC, RST, DELAY>,
     /// Background Color
     color: Color,
     /// Refresh LUT
     refresh: RefreshLut,
 }
 
-impl<SPI, CS, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, CS, BUSY, DC, RST, DELAY>
-    for Epd4in2<SPI, CS, BUSY, DC, RST, DELAY>
+impl<SPI, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, BUSY, DC, RST, DELAY>
+    for Epd4in2<SPI, BUSY, DC, RST, DELAY>
 where
      SPI: SpiDevice,
-    CS: OutputPin,
+
     BUSY: InputPin,
     DC: OutputPin,
     RST: OutputPin,
@@ -145,11 +145,11 @@ where
     }
 }
 
-impl<SPI, CS, BUSY, DC, RST, DELAY> WaveshareDisplay<SPI, CS, BUSY, DC, RST, DELAY>
-    for Epd4in2<SPI, CS, BUSY, DC, RST, DELAY>
+impl<SPI, BUSY, DC, RST, DELAY> WaveshareDisplay<SPI, BUSY, DC, RST, DELAY>
+    for Epd4in2<SPI, BUSY, DC, RST, DELAY>
 where
      SPI: SpiDevice,
-    CS: OutputPin,
+
     BUSY: InputPin,
     DC: OutputPin,
     RST: OutputPin,
@@ -158,13 +158,13 @@ where
     type DisplayColor = Color;
     fn new(
         spi: &mut SPI,
-        cs: CS,
+
         busy: BUSY,
         dc: DC,
         rst: RST,
         delay: &mut DELAY,
     ) -> Result<Self, SPI::Error> {
-        let interface = DisplayInterface::new(cs, busy, dc, rst);
+        let interface = DisplayInterface::new(busy, dc, rst);
         let color = DEFAULT_BACKGROUND_COLOR;
 
         let mut epd = Epd4in2 {
@@ -342,10 +342,10 @@ where
     }
 }
 
-impl<SPI, CS, BUSY, DC, RST, DELAY> Epd4in2<SPI, CS, BUSY, DC, RST, DELAY>
+impl<SPI, BUSY, DC, RST, DELAY> Epd4in2<SPI, BUSY, DC, RST, DELAY>
 where
      SPI: SpiDevice,
-    CS: OutputPin,
+
     BUSY: InputPin,
     DC: OutputPin,
     RST: OutputPin,
@@ -439,11 +439,11 @@ where
     }
 }
 
-impl<SPI, CS, BUSY, DC, RST, DELAY> QuickRefresh<SPI, CS, BUSY, DC, RST, DELAY>
-    for Epd4in2<SPI, CS, BUSY, DC, RST, DELAY>
+impl<SPI, BUSY, DC, RST, DELAY> QuickRefresh<SPI, BUSY, DC, RST, DELAY>
+    for Epd4in2<SPI, BUSY, DC, RST, DELAY>
 where
      SPI: SpiDevice,
-    CS: OutputPin,
+
     BUSY: InputPin,
     DC: OutputPin,
     RST: OutputPin,
