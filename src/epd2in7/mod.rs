@@ -327,6 +327,136 @@ where
         Ok(())
     }
 
+    /// Write frame data and do a full refresh (0xF7) without re-initializing.
+    /// Use this for periodic full refresh while staying in Quick mode,
+    /// to avoid the hardware reset that would clear the internal reference frame.
+    pub fn update_and_display_frame_full(
+        &mut self,
+        spi: &mut SPI,
+        buffer: &[u8],
+        _delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
+        assert!(buffer.len() == buffer_len(WIDTH as usize, HEIGHT as usize));
+        self.command(spi, Command::WriteRam)?;
+        self.interface.data(spi, buffer)?;
+        self.display_update_sequence(spi, 0xF7)
+    }
+
+    /// Fast refresh with explicit old and new frame data.
+    /// Writes old frame to RAM2 (0x26) and new frame to RAM1 (0x24),
+    /// then triggers differential update (0xC7).
+    /// This is required after hardware reset when internal reference is lost.
+    pub fn update_and_display_frame_quick(
+        &mut self,
+        spi: &mut SPI,
+        old_buffer: &[u8],
+        new_buffer: &[u8],
+        _delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
+        let len = buffer_len(WIDTH as usize, HEIGHT as usize);
+        assert!(old_buffer.len() == len);
+        assert!(new_buffer.len() == len);
+
+        // Write old frame to RAM2 (0x26)
+        self.command(spi, Command::WriteRamRed)?;
+        self.interface.data(spi, old_buffer)?;
+
+        // Reset address counters to display origin
+        self.cmd_with_data(spi, Command::SetRamXAddressCounter, &[0x00])?;
+        self.cmd_with_data(spi, Command::SetRamYAddressCounter, &[0x00, 0x00])?;
+
+        // Write new frame to RAM1 (0x24)
+        self.command(spi, Command::WriteRam)?;
+        self.interface.data(spi, new_buffer)?;
+
+        // Differential fast refresh
+        self.display_update_sequence(spi, 0xC7)
+    }
+
+    /// Set base map for partial refresh. Writes image data to both RAM1 (0x24)
+    /// and RAM2 (0x26), then does a full refresh (0xF7) to establish the
+    /// display state and reference frame. Must be called before partial refresh.
+    pub fn set_base_map(
+        &mut self,
+        spi: &mut SPI,
+        buffer: &[u8],
+        _delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
+        let len = buffer_len(WIDTH as usize, HEIGHT as usize);
+        assert!(buffer.len() == len);
+
+        // Write to RAM1 (0x24) - display image
+        self.command(spi, Command::WriteRam)?;
+        self.interface.data(spi, buffer)?;
+
+        // Write to RAM2 (0x26) - same image as reference for partial refresh
+        self.command(spi, Command::WriteRamRed)?;
+        self.interface.data(spi, buffer)?;
+
+        // Full refresh to establish the display
+        self.display_update_sequence(spi, 0xF7)
+    }
+
+    /// Set base map without flashing. Writes old (reference) frame to RAM2 (0x26)
+    /// and new frame to RAM1 (0x24), then does a partial refresh (0xFF).
+    /// Use this after wake-up when the display still shows `old` physically
+    /// and you want to transition to `new` without a full-screen flash.
+    pub fn set_base_map_quiet(
+        &mut self,
+        spi: &mut SPI,
+        old: &[u8],
+        new: &[u8],
+        delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
+        let len = buffer_len(WIDTH as usize, HEIGHT as usize);
+        assert!(old.len() == len);
+        assert!(new.len() == len);
+
+        self.interface.reset(delay, 10);
+        self.wait_until_idle();
+
+        self.cmd_with_data(spi, Command::BorderWaveformControl, &[0x80])?;
+
+        // Write old frame to RAM2 (0x26) - reference matching what's on screen
+        self.command(spi, Command::WriteRamRed)?;
+        self.interface.data(spi, old)?;
+
+        // Write new frame to RAM1 (0x24)
+        self.command(spi, Command::WriteRam)?;
+        self.interface.data(spi, new)?;
+
+        // Partial refresh - only updates changed pixels
+        self.display_update_sequence(spi, 0xFF)
+    }
+
+    /// Full-screen partial refresh with minimal flashing.
+    /// Does hardware reset (preserves RAM2 reference), sets border waveform,
+    /// writes new frame to RAM1 only, then triggers partial update (0xFF).
+    /// RAM2 retains the base map for differential comparison.
+    pub fn update_and_display_frame_partial(
+        &mut self,
+        spi: &mut SPI,
+        buffer: &[u8],
+        delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
+        let len = buffer_len(WIDTH as usize, HEIGHT as usize);
+        assert!(buffer.len() == len);
+
+        // Hardware reset - resets registers but preserves RAM content
+        self.interface.reset(delay, 10);
+        self.wait_until_idle();
+
+        // Set border waveform for partial refresh
+        self.cmd_with_data(spi, Command::BorderWaveformControl, &[0x80])?;
+
+        // Write new frame to RAM1 (0x24)
+        self.command(spi, Command::WriteRam)?;
+        self.interface.data(spi, buffer)?;
+
+        // Partial refresh (0xFF) - minimal flashing
+        self.display_update_sequence(spi, 0xFF)
+    }
+
     fn init_fast_refresh(&mut self, spi: &mut SPI) -> Result<(), SPI::Error> {
         self.cmd_with_data(spi, Command::TemperatureSensorControl, &[0x80])?;
 
