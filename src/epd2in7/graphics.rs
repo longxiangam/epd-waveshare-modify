@@ -1,6 +1,6 @@
 use crate::buffer_len;
 use crate::epd2in7::{DEFAULT_BACKGROUND_COLOR, HEIGHT, WIDTH};
-use crate::graphics::{Display, DisplayRotation};
+use crate::graphics::{Display, DisplayRotation, find_rotation, outside_display};
 use embedded_graphics_core::pixelcolor::BinaryColor;
 use embedded_graphics_core::prelude::*;
 
@@ -28,8 +28,26 @@ impl DrawTarget for Display2in7 {
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        for pixel in pixels {
-            self.draw_helper(WIDTH, HEIGHT, pixel)?;
+        let rotation = self.rotation();
+        let buffer = self.get_mut_buffer();
+
+        for Pixel(point, color) in pixels {
+            if outside_display(point, WIDTH, HEIGHT, rotation) {
+                continue;
+            }
+            let (mut nx, mut ny) = find_rotation(
+                point.x as u32, point.y as u32,
+                WIDTH, HEIGHT, rotation,
+            );
+            // Flip Y after rotation to fix upside-down display on GDEY027T91
+            ny = HEIGHT - 1 - ny;
+            let index = (nx / 8 + ((WIDTH + 7) / 8) * ny) as usize;
+            let bit: u8 = 0x80 >> (nx % 8);
+
+            match color {
+                BinaryColor::On => { buffer[index] &= !bit; }
+                BinaryColor::Off => { buffer[index] |= bit; }
+            }
         }
         Ok(())
     }
