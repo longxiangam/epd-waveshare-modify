@@ -480,7 +480,11 @@ where
     ) -> Result<(), SPI::Error> {
         self.cmd_with_data(spi, Command::DisplayUpdateControl2, &[seq])?;
         self.command(spi, Command::MasterActivation)?;
-        self.wait_until_idle();
+        // 不在此处等待物理刷新完成（原先的自旋会锁死单线程 executor 数百 ms~数秒）。
+        // 物理刷新由 MasterActivation 触发后即自主进行；上层异步任务（display::render）
+        // 在调用本方法的刷新接口后，用 wait_refresh_done 异步轮询 BUSY 等待完成。
+        // 注意：其它 wait_until_idle（reset 后、set_ram_address_counters 开头等）是
+        // "等面板就绪"的短就绪等待，必须保留，否则命令会被丢弃。
         Ok(())
     }
 

@@ -279,8 +279,9 @@ where
             self.set_display_update_control_2(spi, DisplayUpdateControl2::new().display())?;
         }
         self.command(spi, Command::MasterActivation)?;
-        self.wait_until_idle();
-
+        // 不在此处等待物理刷新完成（原先的自旋会锁死单线程 executor）。
+        // 刷新由 MasterActivation 触发后自主进行；上层 display::render 用
+        // wait_refresh_done 异步轮询 BUSY 等待完成。其余 wait_until_idle（就绪等待）保留。
         Ok(())
     }
 
